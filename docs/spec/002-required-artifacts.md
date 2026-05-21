@@ -7,8 +7,6 @@ path are customizable; the chosen convention is recorded in `PROJECT_PROFILE.md`
 and respected on later runs. Drift mode audits each artifact against actual repo
 state.
 
-See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
-
 ## Done When
 
 ### Authority scope

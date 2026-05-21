@@ -6,8 +6,6 @@
 on a System B customer repo. It is idempotent, picks its mode from repo state,
 asks the user only what it must, and lets the user decide how changes land.
 
-See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
-
 ## Done When
 
 ### Modes

@@ -6,8 +6,6 @@
 opencode skill bundle (documented install). A single canonical skill tree serves
 both ecosystems within their verified discovery constraints.
 
-See [design §5](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
-
 ## Done When
 
 ### Layout

@@ -7,8 +7,6 @@ fixture-based behavior harness plus deterministic packaging and frontmatter
 checks. Cost and non-determinism are controlled by separating model-dependent
 tests from deterministic ones.
 
-See [design §6](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
-
 ## Done When
 
 ### Tier 1 — fixture behavior tests
