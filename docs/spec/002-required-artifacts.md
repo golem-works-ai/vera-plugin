@@ -17,7 +17,7 @@ See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
 
 ### CLAUDE.md
 
-- [ ] `CLAUDE.md` exists at the repo root and is non-trivial (more than 10 non-blank lines) <!-- slug: artifacts.claude-md.exists -->
+- [ ] `CLAUDE.md` exists at the repo root and carries real agent guardrails rather than being empty or a stub <!-- slug: artifacts.claude-md.exists -->
 - [ ] `CLAUDE.md` references the task-runner entrypoint and the spec-file and failure-log paths declared in `PROJECT_PROFILE.md`, and those paths resolve <!-- slug: artifacts.claude-md.references-resolve -->
 
 ### PROJECT_PROFILE.md

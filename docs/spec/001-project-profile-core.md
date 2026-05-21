@@ -18,8 +18,8 @@ See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
 
 ### Detection
 
-- [ ] The skill explores the repo for signal (lockfiles, manifests, lint/format/typecheck configs, test dirs, task runner, the required artifacts) without a hardcoded checklist <!-- slug: project-profile.detect.explore -->
-- [ ] The skill identifies blocking unknowns (zero language signal, or genuinely ambiguous signal) separately from defaultable values <!-- slug: project-profile.detect.blocking-unknowns -->
+- [ ] The skill detects the repo's stack, tooling, and which required artifacts already exist from available repo signal <!-- slug: project-profile.detect.explore -->
+- [ ] The skill distinguishes blocking unknowns (no language signal, or genuinely ambiguous signal) from values it can reasonably default <!-- slug: project-profile.detect.blocking-unknowns -->
 
 ### Question flow
 
@@ -29,7 +29,7 @@ See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
 
 ### Stack handling
 
-- [ ] With a known supported stack, the skill proposes opinionated defaults (Python: uv/ruff/mypy/pytest/just; TypeScript: npm or detected pnpm/yarn, eslint, prettier, tsc, vitest) <!-- slug: project-profile.stack.opinionated-defaults -->
+- [ ] With a known supported stack, the skill proposes its opinionated default tooling for that stack <!-- slug: project-profile.stack.opinionated-defaults -->
 - [ ] An existing repo in an unsupported language is not clobbered; the skill scaffolds only the language-independent core and leaves tooling as `<fill-me-in>` <!-- slug: project-profile.stack.unsupported-not-clobbered -->
 
 ### Interactivity detection
@@ -41,15 +41,14 @@ See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
 ### Review and git gates
 
 - [ ] Interactive generate mode presents a single review block (detected vs. defaulted values, files to create/modify, and already-satisfied artifacts) before any write <!-- slug: project-profile.gate.review-block -->
-- [ ] The gate question offers three outcomes: leave as working-tree changes, commit on the current branch, or new branch + push + open PR <!-- slug: project-profile.gate.three-outcomes -->
+- [ ] The gate question offers three outcomes: leave as working-tree changes, commit on the current branch, or open a PR <!-- slug: project-profile.gate.three-outcomes -->
 - [ ] The end-of-summary message offers to re-present the review as individual questions on request <!-- slug: project-profile.gate.offer-questions -->
-- [ ] Commits are grouped by concern (agent guardrails, spec scaffold, failure log, task runner), skipping empty groups <!-- slug: project-profile.gate.grouped-commits -->
 
 ### Non-interactive behavior
 
-- [ ] Non-interactive runs make reasonable choices, write to branch `vera/project-profile`, commit, push, and open a PR with no prompts <!-- slug: project-profile.noninteractive.pr -->
-- [ ] The non-interactive PR body lists every file and flags `<fill-me-in>` placeholders prominently as the review surface <!-- slug: project-profile.noninteractive.pr-body-flags -->
-- [ ] A non-interactive empty repo (no language signal) emits only the language-independent core plus a placeholder task runner whose `precommit` echoes a TODO <!-- slug: project-profile.noninteractive.empty-core -->
+- [ ] Non-interactive runs make reasonable choices and open a PR with no prompts <!-- slug: project-profile.noninteractive.pr -->
+- [ ] The non-interactive PR body lists every changed file and flags `<fill-me-in>` placeholders prominently as the review surface <!-- slug: project-profile.noninteractive.pr-body-flags -->
+- [ ] A non-interactive empty repo (no language signal) emits only the language-independent core plus a placeholder task runner <!-- slug: project-profile.noninteractive.empty-core -->
 
 ### Idempotency
 
