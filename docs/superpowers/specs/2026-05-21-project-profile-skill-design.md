@@ -108,6 +108,9 @@ canonical convention and respected on subsequent runs.
 - Contains ≥1 done-when criterion line (or the template marker for empty
   repos).
 - If the chosen format uses slugs, every criterion line has one; slugs unique.
+  Whether the format is slug-based is read from `PROJECT_PROFILE.md` (it
+  declares the spec format), not inferred — the default checkbox format is
+  slug-based; a repo declaring a non-slug custom format skips the slug checks.
 - Drift = missing, empty, or duplicate-slug. **Format is not enforced** — a
   custom format declared in the profile is respected, not rewritten.
 
@@ -151,8 +154,10 @@ block where the user can override it.
 
 **Step 3 — Ask (interactive only), one question at a time.** Use a structured
 question (e.g. `AskUserQuestion`). Stack options are **Python** and
-**TypeScript** only (plus the implicit "Other" affordance). Keep to the minimum
-needed to unblock — typically one question.
+**TypeScript** only. The implicit "Other" affordance is an escape hatch, not a
+third supported stack: choosing it routes to the language-independent core with
+tooling left as `<fill-me-in>` (same outcome as detecting an unsupported
+language). Keep to the minimum needed to unblock — typically one question.
 
 **Step 4 — Resolve defaults.** With the stack known, fill required-core
 specifics from opinionated defaults (Python → uv/ruff/mypy/pytest/just; TS →
@@ -346,7 +351,11 @@ limits) — satisfies both Claude Code and opencode validators.
 
 **Deliberately skipped (YAGNI):** mocking the LLM; snapshotting exact generated
 prose (assert structure/required sections instead); automated interactive-mode
-tests (cover non-interactive in CI; verify interactive manually).
+tests (cover non-interactive in CI; verify interactive manually). The manual
+interactive checklist must explicitly enumerate the three behaviors that have no
+automated coverage so they don't silently rot: (a) the one-at-a-time stack
+question (§3), (b) the gate question with its three answers (§4), and (c) the
+"present as individual questions instead" affordance (§4).
 
 **Cadence & location:**
 - Harness lives in the `vera-plugin` repo (self-contained, own CI).
@@ -360,6 +369,10 @@ tests (cover non-interactive in CI; verify interactive manually).
 
 - Exact wording/structure of the generated `CLAUDE.md`, `PROJECT_PROFILE.md`,
   spec template, and failure-registry files for the v1 bundle.
-- The precise non-interactive flag name/contract (interactivity detection B).
+- The precise non-interactive flag name/contract (interactivity detection B),
+  **and** the exact signal the skill reads for the C fallback — since a
+  `SKILL.md` is instructions to an LLM, not code, pin down what the skill is
+  told to observe (e.g. a harness-provided env var, TTY presence, or the
+  trigger metadata) so the C path is actionable rather than hand-wavy.
 - Fixture repo contents and the assertion harness implementation.
 - README content for both install paths.
