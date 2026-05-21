@@ -1,0 +1,58 @@
+# Project Profile — Core Behavior
+
+## Goal
+
+`vera:project-profile` establishes and maintains an opinionated minimum baseline
+on a System B customer repo. It is idempotent, picks its mode from repo state,
+asks the user only what it must, and lets the user decide how changes land.
+
+See [design](../superpowers/specs/2026-05-21-project-profile-skill-design.md).
+
+## Done When
+
+### Modes
+
+- [ ] The skill runs from a single entry point and selects its mode automatically from repo state <!-- slug: project-profile.mode.auto-select -->
+- [ ] Generate mode triggers when no `PROJECT_PROFILE.md` exists <!-- slug: project-profile.mode.generate-trigger -->
+- [ ] Drift mode triggers when `PROJECT_PROFILE.md` already exists <!-- slug: project-profile.mode.drift-trigger -->
+
+### Detection
+
+- [ ] The skill explores the repo for signal (lockfiles, manifests, lint/format/typecheck configs, test dirs, task runner, the required artifacts) without a hardcoded checklist <!-- slug: project-profile.detect.explore -->
+- [ ] The skill identifies blocking unknowns (zero language signal, or genuinely ambiguous signal) separately from defaultable values <!-- slug: project-profile.detect.blocking-unknowns -->
+
+### Question flow
+
+- [ ] In an interactive session, the skill asks only the blocking unknowns, one question at a time <!-- slug: project-profile.questions.minimal-one-at-a-time -->
+- [ ] The stack question offers only Python and TypeScript as supported options <!-- slug: project-profile.questions.python-typescript-only -->
+- [ ] Choosing the "Other" stack escape hatch routes to the language-independent core with tooling left as `<fill-me-in>` <!-- slug: project-profile.questions.other-escape-hatch -->
+
+### Stack handling
+
+- [ ] With a known supported stack, the skill proposes opinionated defaults (Python: uv/ruff/mypy/pytest/just; TypeScript: npm or detected pnpm/yarn, eslint, prettier, tsc, vitest) <!-- slug: project-profile.stack.opinionated-defaults -->
+- [ ] An existing repo in an unsupported language is not clobbered; the skill scaffolds only the language-independent core and leaves tooling as `<fill-me-in>` <!-- slug: project-profile.stack.unsupported-not-clobbered -->
+
+### Interactivity detection
+
+- [ ] An explicit invocation flag forces non-interactive mode (signal B) <!-- slug: project-profile.interactivity.explicit-flag -->
+- [ ] With no flag, the skill infers interactivity from trigger context — automated/GitHub trigger is non-interactive, human invocation is interactive (signal C) <!-- slug: project-profile.interactivity.trigger-fallback -->
+- [ ] The unrelated `--in-multi-agent` token is treated as a no-op, not as the interactivity signal <!-- slug: project-profile.interactivity.ignore-multi-agent -->
+
+### Review and git gates
+
+- [ ] Interactive generate mode presents a single review block (detected vs. defaulted values, files to create/modify, and already-satisfied artifacts) before any write <!-- slug: project-profile.gate.review-block -->
+- [ ] The gate question offers three outcomes: leave as working-tree changes, commit on the current branch, or new branch + push + open PR <!-- slug: project-profile.gate.three-outcomes -->
+- [ ] The end-of-summary message offers to re-present the review as individual questions on request <!-- slug: project-profile.gate.offer-questions -->
+- [ ] Commits are grouped by concern (agent guardrails, spec scaffold, failure log, task runner), skipping empty groups <!-- slug: project-profile.gate.grouped-commits -->
+
+### Non-interactive behavior
+
+- [ ] Non-interactive runs make reasonable choices, write to branch `vera/project-profile`, commit, push, and open a PR with no prompts <!-- slug: project-profile.noninteractive.pr -->
+- [ ] The non-interactive PR body lists every file and flags `<fill-me-in>` placeholders prominently as the review surface <!-- slug: project-profile.noninteractive.pr-body-flags -->
+- [ ] A non-interactive empty repo (no language signal) emits only the language-independent core plus a placeholder task runner whose `precommit` echoes a TODO <!-- slug: project-profile.noninteractive.empty-core -->
+
+### Idempotency
+
+- [ ] Re-running on a satisfied repo writes nothing and opens no PR, in both modes <!-- slug: project-profile.idempotency.no-writes -->
+- [ ] Drift mode that finds no drift prints a "no drift" message and exits without prompting or writing <!-- slug: project-profile.idempotency.no-drift-exit -->
+- [ ] An artifact in a non-default location or format declared in `PROJECT_PROFILE.md` is respected, never relocated or reformatted <!-- slug: project-profile.idempotency.preserve-convention -->
