@@ -1,0 +1,19 @@
+{
+  "skills": [
+    {
+      "name": "commit-assistant",
+      "path": "skills/commit-assistant/SKILL.md",
+      "url": "https://raw.githubusercontent.com/golem-works-ai/vera-plugin/main/skills/commit-assistant/SKILL.md"
+    },
+    {
+      "name": "finalize-and-push",
+      "path": "skills/finalize-and-push/SKILL.md",
+      "url": "https://raw.githubusercontent.com/golem-works-ai/vera-plugin/main/skills/finalize-and-push/SKILL.md"
+    },
+    {
+      "name": "implement",
+      "path": "skills/implement/SKILL.md",
+      "url": "https://raw.githubusercontent.com/golem-works-ai/vera-plugin/main/skills/implement/SKILL.md"
+    }
+  ]
+}
