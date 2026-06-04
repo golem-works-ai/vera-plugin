@@ -1,4 +1,4 @@
-# vera-template-version: 2026.05.17.1
+# vera-template-version: 2026.06.01.2
 # DO NOT EDIT — managed by WorkflowManager. Manual edits will be overwritten.
 #
 # AGENT-NOTE: This file is a PURE BOOTLOADER. It must not contain any
@@ -75,8 +75,14 @@ jobs:
           VERA_CALLBACK_TOKEN: ${{ inputs.callback_token }}
           VERA_API_URL: ${{ inputs.vera_api_url }}
         run: |
+          # Issue #3815: every credential-exchange failure path below writes
+          # a ``runner-credential-exchange-failed`` reason to
+          # /tmp/vera_step_failure_reason so the Report failure step surfaces
+          # it and the classifier auto-retries (KNOWN_TRANSIENT_INFRA).
           if [ -z "$VERA_API_URL" ] || [ -z "$VERA_JOB_ID" ] || [ -z "$VERA_CALLBACK_TOKEN" ]; then
             echo "::error::Missing required inputs: vera_api_url, job_id, or callback_token"
+            printf '%s' "runner-credential-exchange-failed: missing required inputs" \
+              > /tmp/vera_step_failure_reason
             exit 1
           fi
           # Retry policy is owned by this loop, NOT curl's --retry. The Vera
@@ -107,21 +113,47 @@ jobs:
               if [ "$ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
                 echo "::error::vera-creds: budget exhausted after ${MAX_ATTEMPTS} attempts of job_not_ready"
                 printf '%s\n' "$BODY"
+                printf '%s' "runner-credential-exchange-failed: budget exhausted after ${MAX_ATTEMPTS} attempts of job_not_ready" \
+                  > /tmp/vera_step_failure_reason
                 exit 1
               fi
               sleep 2
               continue
             fi
+            # Issue #3847: a 409 with code=credentials_already_issued means
+            # another runner already won the race and is doing the work. The
+            # job is not failed — it is owned by the winner. Mirror the 410
+            # graceful path so the loser exits 0 instead of failing the
+            # workflow and overwriting the winner's terminal state.
+            if [ "$HTTP_CODE" = "409" ] && \
+               [ "$(printf '%s' "$BODY" | jq -r '.code // empty' 2>/dev/null)" = "credentials_already_issued" ]; then
+              echo "vera-creds: another runner already owns this job; exiting gracefully"
+              touch /tmp/vera_graceful_exit
+              # Suppress the failsafe finalizer — the winning runner will
+              # post the terminal callback comment.
+              touch /tmp/vera_callback_sent
+              exit 0
+            fi
             echo "::error::vera-creds: non-retryable HTTP ${HTTP_CODE} on attempt $((ATTEMPT + 1))"
             printf '%s\n' "$BODY"
+            printf '%s' "runner-credential-exchange-failed: non-retryable HTTP ${HTTP_CODE}" \
+              > /tmp/vera_step_failure_reason
             exit 1
           done
           if [ "$HTTP_CODE" = "410" ]; then
-            echo "Job was cancelled by Vera, exiting gracefully"
+            echo "Job was canceled by Vera, exiting gracefully"
+            # Mirror the credentials_already_issued path: leave a sentinel so
+            # the Run / Report-success / Report-failure steps below all
+            # short-circuit instead of running with an empty exec_script and
+            # firing a spurious failed callback on the already-terminated job.
+            touch /tmp/vera_graceful_exit
+            touch /tmp/vera_callback_sent
             exit 0
           fi
           if [ "$(printf '%s' "$BODY" | jq -r '.status // empty')" != "ok" ]; then
             echo "::error::Credential exchange returned a non-ok status"
+            printf '%s' "runner-credential-exchange-failed: credential exchange returned a non-ok status" \
+              > /tmp/vera_step_failure_reason
             exit 1
           fi
           # Mask every secret BEFORE exporting it.
@@ -141,7 +173,16 @@ jobs:
         env:
           GH_TOKEN: ${{ env.GITHUB_APP_TOKEN || secrets.GITHUB_TOKEN }}
           GITHUB_TOKEN: ${{ env.GITHUB_APP_TOKEN || secrets.GITHUB_TOKEN }}
-        run: bash /tmp/vera_exec.sh
+        run: |
+          # Issue #3847: graceful-exit sentinel (set by 410 job-terminated or
+          # 409 credentials_already_issued in Fetch job package) skips the
+          # agent run entirely so the loser of a credentials race does not
+          # execute a missing /tmp/vera_exec.sh and fail the workflow.
+          if [ -f /tmp/vera_graceful_exit ]; then
+            echo "Graceful exit sentinel present — skipping agent run."
+            exit 0
+          fi
+          bash /tmp/vera_exec.sh
 
       - name: Report success
         if: success()
@@ -150,6 +191,12 @@ jobs:
           VERA_CALLBACK_TOKEN: ${{ inputs.callback_token }}
           VERA_API_URL: ${{ inputs.vera_api_url }}
         run: |
+          # Issue #3847: skip success callback on graceful exit — the
+          # winning runner owns the job's terminal state.
+          if [ -f /tmp/vera_graceful_exit ]; then
+            echo "Graceful exit sentinel present — skipping success callback."
+            exit 0
+          fi
           OUTCOME_FIELD=""
           if [ -f /tmp/vera_outcome.json ]; then
             OUTCOME_JSON=$(jq -c . /tmp/vera_outcome.json 2>/dev/null || echo "")
@@ -211,13 +258,31 @@ jobs:
           VERA_CALLBACK_TOKEN: ${{ inputs.callback_token }}
           VERA_API_URL: ${{ inputs.vera_api_url }}
         run: |
+          # Issue #3847: never report failed for the loser of a credentials
+          # race — the winning runner is actively working the job. The 410
+          # job-terminated path also takes this branch so it does not
+          # double-mark an already-canceled job.
+          if [ -f /tmp/vera_graceful_exit ]; then
+            echo "Graceful exit sentinel present — skipping failure callback."
+            exit 0
+          fi
+          # Issue #3815: a prior step's specific reason (Fetch job package
+          # writes one on credential-exchange failure) wins over the opaque
+          # "Workflow failed" so the classifier can retry.
+          ERROR_MSG="Workflow failed"
+          if [ -f /tmp/vera_step_failure_reason ]; then
+            REASON=$(tr -d '\n\r"\\' < /tmp/vera_step_failure_reason | head -c 500)
+            if [ -n "$REASON" ]; then
+              ERROR_MSG="$REASON"
+            fi
+          fi
           # Layer 1+3: a failed callback POST must fail the step (loud, not a
           # warning). On a confirmed 2xx, drop the sentinel that gates the
           # failsafe finalizer below.
           if curl -sf --retry 3 --retry-delay 5 \
             -X POST "${VERA_API_URL}/internal/jobs/callback" \
             -H "Content-Type: application/json" \
-            -d "{\"job_id\": \"${VERA_JOB_ID}\", \"token\": \"${VERA_CALLBACK_TOKEN}\", \"status\": \"failed\", \"error\": \"Workflow failed\"}"; then
+            -d "{\"job_id\": \"${VERA_JOB_ID}\", \"token\": \"${VERA_CALLBACK_TOKEN}\", \"status\": \"failed\", \"error\": \"${ERROR_MSG}\"}"; then
             touch /tmp/vera_callback_sent
           else
             echo "::error::callback POST failed"
