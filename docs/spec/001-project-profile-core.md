@@ -17,7 +17,7 @@ asks the user only what it must, and lets the user decide how changes land.
 ### Detection
 
 - [ ] The skill detects the repo's stack, tooling, and which required artifacts already exist from available repo signal <!-- slug: project-profile.detect.explore -->
-- [#15] The skill treats missing or genuinely ambiguous language signal as blocking unknowns, while defaulting non-blocking values from repo signal <!-- slug: project-profile.detect.blocking-unknowns -->
+- [x] The skill treats missing or genuinely ambiguous language signal as blocking unknowns, while defaulting non-blocking values from repo signal <!-- slug: project-profile.detect.blocking-unknowns -->
 
 ### Question flow
 
