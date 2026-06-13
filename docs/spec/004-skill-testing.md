@@ -13,6 +13,7 @@ tests from deterministic ones.
 
 - [ ] A harness runs the skill non-interactively against fixture repos and asserts on the resulting working-tree changes <!-- slug: testing.tier1.harness -->
 - [ ] An `empty/` fixture (LICENSE only) yields the language-independent core, `Stack: <fill-me-in>`, and a placeholder task runner <!-- slug: testing.tier1.empty -->
+- [#15] An `ambiguous-signal/` fixture (conflicting Python and TypeScript repo signal) is treated as a blocking unknown while non-blocking values still default from repo signal <!-- slug: testing.tier1.blocking-unknowns -->
 - [ ] A `python-clean/` fixture (pyproject + uv.lock + tests/) yields detection with no questions and proposed Python defaults <!-- slug: testing.tier1.python-clean -->
 - [ ] A `typescript-clean/` fixture (package.json + pnpm-lock) documents pnpm rather than replacing it and proposes TypeScript defaults <!-- slug: testing.tier1.typescript-clean -->
 - [ ] A `populated-satisfied/` fixture (all five artifacts present and consistent) produces no drift and zero writes <!-- slug: testing.tier1.populated-satisfied -->
