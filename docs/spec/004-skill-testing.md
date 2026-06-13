@@ -34,4 +34,5 @@ tests from deterministic ones.
 
 - [ ] The test harness lives in the `vera-plugin` repo and runs on its own CI <!-- slug: testing.cadence.in-repo -->
 - [ ] Deterministic Tiers 2–3 run in CI on every PR; model-dependent Tier 1 runs on demand or nightly to control token cost and non-determinism <!-- slug: testing.cadence.split -->
-- [ ] A manual interactive checklist enumerates the three behaviors without automated coverage: the one-at-a-time stack question, the gate question, and the "present as individual questions" affordance <!-- slug: testing.manual.interactive-checklist -->
+- [#16] A manual interactive checklist verifies that only blocking unknowns are asked and each prompt asks exactly one unknown at a time <!-- slug: testing.manual.interactive-checklist -->
+- [ ] The manual interactive checklist also covers the gate question and the "present as individual questions" affordance <!-- slug: testing.manual.gate-and-represent -->
