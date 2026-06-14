@@ -20,7 +20,7 @@ state.
 
 ### PROJECT_PROFILE.md
 
-- [ ] `PROJECT_PROFILE.md` exists with a populated `Stack` section for supported stacks (Python/TypeScript); unsupported or unknown stacks may remain `<fill-me-in>` until confirmed <!-- slug: artifacts.profile.stack-populated -->
+- [ ] `PROJECT_PROFILE.md` exists with a populated `Stack` section for supported stacks (Python/TypeScript); supported stacks carry opinionated default tooling (Python: `uv` + `ruff` + `pytest`, TypeScript: `pnpm` + `eslint` + `prettier` + `vitest`), while unsupported or unknown stacks may remain `<fill-me-in>` until confirmed <!-- slug: artifacts.profile.stack-populated -->
 - [ ] `PROJECT_PROFILE.md` declares paths for the spec file, failure log, task runner, and test dirs, and each declared path resolves on disk <!-- slug: artifacts.profile.paths-resolve -->
 - [ ] Each tool declared in `PROJECT_PROFILE.md` (package manager, linter, formatter, test framework) has corresponding repo signal <!-- slug: artifacts.profile.tools-have-signal -->
 

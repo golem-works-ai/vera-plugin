@@ -21,6 +21,10 @@ form:
 Slugs must be globally unique within `docs/spec/`. Reference them in tests so
 spec coverage can be tracked.
 
+For stack-sensitive criteria, include the supported-stack default contract in
+the criterion text so fixture assertions can verify the exact default toolchain
+selection.
+
 ## Pull Request Requirement
 
 If a pull request modifies files under `docs/spec/`, include at least one
