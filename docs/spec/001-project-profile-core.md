@@ -27,7 +27,7 @@ asks the user only what it must, and lets the user decide how changes land.
 
 ### Stack handling
 
-- [ ] With a known supported stack, the skill proposes its opinionated default tooling for that stack <!-- slug: project-profile.stack.opinionated-defaults -->
+- [x] With a known supported stack, the skill proposes its opinionated default tooling for that stack (Python defaults to `uv` + `ruff` + `pytest`; TypeScript defaults to `pnpm` + `eslint` + `prettier` + `vitest`) <!-- slug: project-profile.stack.opinionated-defaults -->
 - [ ] An existing repo in an unsupported language is not clobbered; the skill scaffolds only the language-independent core and leaves tooling as `<fill-me-in>` <!-- slug: project-profile.stack.unsupported-not-clobbered -->
 
 ### Interactivity detection
