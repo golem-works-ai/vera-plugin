@@ -23,7 +23,7 @@ asks the user only what it must, and lets the user decide how changes land.
 
 - [x] In an interactive session, the skill asks only blocking unknowns and asks them one question at a time <!-- slug: project-profile.questions.minimal-one-at-a-time -->
 - [x] The stack question offers only Python and TypeScript as supported options (with "Other" as an unsupported-language escape hatch) <!-- slug: project-profile.questions.python-typescript-only -->
-- [ ] Choosing the "Other" stack escape hatch routes to the language-independent core with tooling left as `<fill-me-in>` <!-- slug: project-profile.questions.other-escape-hatch -->
+- [x] Choosing the "Other" stack escape hatch routes to the language-independent core with tooling left as `<fill-me-in>` <!-- slug: project-profile.questions.other-escape-hatch -->
 
 ### Stack handling
 
