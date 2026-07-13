@@ -1,4 +1,4 @@
-# vera-template-version: 2026.06.01.2
+# vera-template-version: 2026.07.08
 # DO NOT EDIT — managed by WorkflowManager. Manual edits will be overwritten.
 #
 # AGENT-NOTE: This file is a PURE BOOTLOADER. It must not contain any
@@ -18,7 +18,11 @@
 # sync. CI will fail on push-to-main if it isn't. Incident:
 # docs/failures/2026-04/23-workflow-template-drift.md
 name: Vera
-run-name: Vera — ${{ inputs.job_summary || format('job {0}', inputs.job_id) }}
+# The trailing ``[short id]`` ALWAYS embeds the first UUID segment of the Vera
+# job id so the recovery layer can match a run back to its own dispatched job
+# (issue #4255). Keep it unconditional — dropping it whenever job_summary is set
+# is what made review/ux-review runs unmatchable and leaked credit.
+run-name: Vera — ${{ inputs.job_summary || format('job {0}', inputs.job_id) }} [${{ inputs.job_short_id }}]
 
 on:
   workflow_dispatch:
@@ -30,6 +34,11 @@ on:
         type: string
       job_id:
         description: "Vera job ID"
+        required: false
+        default: ""
+        type: string
+      job_short_id:
+        description: "First UUID segment of the Vera job ID (run-name matcher)"
         required: false
         default: ""
         type: string
@@ -89,11 +98,19 @@ jobs:
           # dispatcher fires workflow_dispatch before the pending→running DB
           # commit lands; the runner can win the race and hit a 409
           # job_not_ready. curl's --retry only covers transport / 5xx, so we
-          # retry 409s explicitly here. ~5 attempts * 2s sleep = ~10s budget,
-          # well above the typical sub-second pending→running window.
+          # retry 409s explicitly here.
+          #
+          # Budget: MAX_ATTEMPTS * SLEEP_SECONDS = ~30s (issue #4135). The
+          # original 5 * 2s = 10s budget was sized for the "sub-second
+          # pending→running window", but under application load the DB commit
+          # can take longer and exhaust the budget before status flips — the
+          # canary hit "budget exhausted after 5 attempts of job_not_ready".
+          # The step timeout still bounds total runtime, so a wider budget
+          # cannot hang indefinitely.
           # Credential response stays in $BODY only — never on disk (#2208).
           ATTEMPT=0
-          MAX_ATTEMPTS=5
+          MAX_ATTEMPTS=15
+          SLEEP_SECONDS=2
           while :; do
             RESPONSE=$(curl -sS -w $'\n%{http_code}' \
               -X POST "${VERA_API_URL}/internal/jobs/credentials" \
@@ -117,7 +134,7 @@ jobs:
                   > /tmp/vera_step_failure_reason
                 exit 1
               fi
-              sleep 2
+              sleep "${SLEEP_SECONDS}"
               continue
             fi
             # Issue #3847: a 409 with code=credentials_already_issued means
@@ -136,8 +153,18 @@ jobs:
             fi
             echo "::error::vera-creds: non-retryable HTTP ${HTTP_CODE} on attempt $((ATTEMPT + 1))"
             printf '%s\n' "$BODY"
-            printf '%s' "runner-credential-exchange-failed: non-retryable HTTP ${HTTP_CODE}" \
-              > /tmp/vera_step_failure_reason
+            # Issue #3951: a 404 means this run was orphaned — the GHA run is
+            # live but no Job row was ever committed, so there is nothing to
+            # authenticate against. Retrying THIS run cannot help; only a fresh
+            # dispatch can. Write a specific reason so the failsafe finalizer
+            # below surfaces it instead of the misleading "retry the dispatch".
+            if [ "$HTTP_CODE" = "404" ]; then
+              printf '%s' "Vera job row not found (404): this run was orphaned (no backing job row was committed). A fresh dispatch is required — retrying this run cannot help." \
+                > /tmp/vera_step_failure_reason
+            else
+              printf '%s' "runner-credential-exchange-failed: non-retryable HTTP ${HTTP_CODE}" \
+                > /tmp/vera_step_failure_reason
+            fi
             exit 1
           done
           if [ "$HTTP_CODE" = "410" ]; then
@@ -197,15 +224,16 @@ jobs:
             echo "Graceful exit sentinel present — skipping success callback."
             exit 0
           fi
-          OUTCOME_FIELD=""
-          if [ -f /tmp/vera_outcome.json ]; then
-            OUTCOME_JSON=$(jq -c . /tmp/vera_outcome.json 2>/dev/null || echo "")
-            if [ -n "$OUTCOME_JSON" ]; then
-              OUTCOME_FIELD=", \"outcome\": ${OUTCOME_JSON}"
-            fi
-          fi
+          # Issue #4695: marshal the callback body with ``jq -n`` from plain
+          # shell string vars instead of splicing decoded (multi-line) error
+          # text into a hand-rolled JSON literal — string-splicing truncated the
+          # body, left a bare `n` where an escaped newline was stripped, and bled
+          # content across runs. All the STATUS/ERROR decision logic below stays;
+          # it just produces plain ``STATUS`` / ``ERROR_MSG`` strings that jq
+          # encodes safely.
           STATUS="completed"
-          ERROR_FIELD=""
+          ERROR_MSG=""
+          HAVE_OUTCOME_ERROR=""
           # An agent that could not proceed autonomously writes a
           # needs_input outcome — surface it as awaiting_human (issue #2907).
           # A failed outcome status (e.g. the exec_script outcome-file contract
@@ -220,7 +248,8 @@ jobs:
               STATUS="failed"
               OUTCOME_ERROR=$(jq -r '.error // empty' /tmp/vera_outcome.json 2>/dev/null)
               if [ -n "$OUTCOME_ERROR" ]; then
-                ERROR_FIELD=", \"error\": \"${OUTCOME_ERROR}\""
+                ERROR_MSG="$OUTCOME_ERROR"
+                HAVE_OUTCOME_ERROR="1"
               fi
             fi
           fi
@@ -229,15 +258,56 @@ jobs:
             AGENT_EC=$(tr -d '[:space:]' < /tmp/vera_agent_exit_code)
             if [ -n "$AGENT_EC" ] && [ "$AGENT_EC" != "0" ]; then
               STATUS="failed"
-              ERROR_FIELD=", \"error\": \"Agent exited with code ${AGENT_EC}\""
+              # Issue #4273: decode the runner exit code into a signal-aware
+              # reason so OOM/timeout/crash are distinguishable instead of an
+              # opaque "Agent exited with code N". The reason strings below are
+              # matched by _RUNNER_SIGNAL_REASON_SIGNATURES in
+              # src/vera/lifecycle/failure_classifier.py — keep them in lockstep:
+              # SIGKILL/SIGTERM/timeout classify as retryable transient infra,
+              # SIGSEGV/SIGABRT and bare exit 1 stay terminal. A signal is
+              # 128 + N in the runner exit code.
+              if [ "$AGENT_EC" -ge 128 ] 2>/dev/null; then
+                SIG=$((AGENT_EC - 128))
+                case "$SIG" in
+                  9) EXIT_REASON="Agent killed by signal SIGKILL (runner-killed-or-oom)" ;;
+                  15) EXIT_REASON="Agent killed by signal SIGTERM" ;;
+                  11) EXIT_REASON="Agent crashed with signal SIGSEGV" ;;
+                  6) EXIT_REASON="Agent crashed with signal SIGABRT" ;;
+                  *) EXIT_REASON="Agent killed by signal ${SIG} (exit ${AGENT_EC})" ;;
+                esac
+              elif [ "$AGENT_EC" = "124" ]; then
+                EXIT_REASON="Agent run timed out (exit 124 timeout)"
+              else
+                EXIT_REASON="Agent exited with code ${AGENT_EC} (no signal)"
+              fi
+              if [ -n "$HAVE_OUTCOME_ERROR" ]; then
+                # A richer outcome.error is already set (e.g. the opencode
+                # LLM-provider error, issue #3735) — keep it as the primary
+                # error and only annotate it with the decoded exit reason
+                # rather than clobbering it.
+                ERROR_MSG="${OUTCOME_ERROR} [${EXIT_REASON}]"
+              else
+                ERROR_MSG="$EXIT_REASON"
+              fi
             fi
           else
             # Layer 2: a missing sentinel means we cannot prove the agent
             # finished cleanly — treat it as a failure rather than greenwash.
             STATUS="failed"
-            ERROR_FIELD=", \"error\": \"Agent exit code unknown (sentinel missing)\""
+            ERROR_MSG="Agent exit code unknown (sentinel missing)"
           fi
-          PAYLOAD="{\"job_id\": \"${VERA_JOB_ID}\", \"token\": \"${VERA_CALLBACK_TOKEN}\", \"status\": \"${STATUS}\"${OUTCOME_FIELD}${ERROR_FIELD}}"
+          # Read the raw outcome JSON as a single compact object (or null) and
+          # let jq attach it — no shell string splicing into the JSON literal.
+          OUTCOME_JSON=$(jq -c . /tmp/vera_outcome.json 2>/dev/null || echo null)
+          PAYLOAD=$(jq -n \
+            --arg job_id "$VERA_JOB_ID" \
+            --arg token "$VERA_CALLBACK_TOKEN" \
+            --arg status "$STATUS" \
+            --arg error "$ERROR_MSG" \
+            --argjson outcome "${OUTCOME_JSON:-null}" \
+            '{job_id:$job_id, token:$token, status:$status}
+             + (if $error != "" then {error:$error} else {} end)
+             + (if $outcome != null then {outcome:$outcome} else {} end)')
           # Layer 1+3: a failed callback POST must fail the step (loud, not a
           # warning). On a confirmed 2xx, drop the sentinel that gates the
           # failsafe finalizer below.
@@ -271,18 +341,52 @@ jobs:
           # "Workflow failed" so the classifier can retry.
           ERROR_MSG="Workflow failed"
           if [ -f /tmp/vera_step_failure_reason ]; then
-            REASON=$(tr -d '\n\r"\\' < /tmp/vera_step_failure_reason | head -c 500)
+            # Issue #4695: keep the DECODED text — never ``tr -d`` the backslash,
+            # which turns an escaped ``\n`` into a bare `n`. Cap length only.
+            REASON=$(head -c 500 < /tmp/vera_step_failure_reason)
             if [ -n "$REASON" ]; then
               ERROR_MSG="$REASON"
             fi
+          elif [ -f /tmp/vera_outcome.json ]; then
+            # Issue #4404: a runtime step may force a non-zero exit (so this
+            # failure branch fires instead of "Report success") while writing
+            # ONLY /tmp/vera_outcome.json — e.g. the opencode error-JSON branch
+            # which records the redacted LLM-provider error plus
+            # failure_marker="opencode_error_json". Without this fallback that
+            # rich outcome is orphaned (Report success never runs) and the job
+            # surfaces the opaque "Workflow failed" → UNRECOGNIZED, mis-routing
+            # retry/alerting. Mirror the Report-success lift: pull .error and
+            # .failure_marker so the classifier sees the transient signal. The
+            # marker is appended so it reaches the reason-string classifier even
+            # when the provider message text is empty or unrecognized.
+            OUTCOME_STATUS=$(jq -r '.status // empty' /tmp/vera_outcome.json 2>/dev/null)
+            if [ "$OUTCOME_STATUS" = "failed" ]; then
+              OUTCOME_ERROR=$(jq -r '.error // empty' /tmp/vera_outcome.json 2>/dev/null)
+              OUTCOME_MARKER=$(jq -r '.failure_marker // empty' /tmp/vera_outcome.json 2>/dev/null)
+              # Issue #4695: keep the DECODED text — cap length only, never
+              # ``tr -d`` the backslash out of an escaped ``\n``.
+              CANDIDATE=$(printf '%s%s' "$OUTCOME_ERROR" "${OUTCOME_MARKER:+ [${OUTCOME_MARKER}]}" \
+                | head -c 500)
+              if [ -n "$CANDIDATE" ]; then
+                ERROR_MSG="$CANDIDATE"
+              fi
+            fi
           fi
+          # Issue #4695: marshal the body with ``jq -n`` so the decoded error
+          # (which may contain newlines, quotes, or backslashes) is encoded
+          # safely instead of spliced into a JSON literal.
+          PAYLOAD=$(jq -n \
+            --arg job_id "$VERA_JOB_ID" \
+            --arg token "$VERA_CALLBACK_TOKEN" \
+            --arg error "$ERROR_MSG" \
+            '{job_id:$job_id, token:$token, status:"failed", error:$error}')
           # Layer 1+3: a failed callback POST must fail the step (loud, not a
           # warning). On a confirmed 2xx, drop the sentinel that gates the
           # failsafe finalizer below.
           if curl -sf --retry 3 --retry-delay 5 \
             -X POST "${VERA_API_URL}/internal/jobs/callback" \
             -H "Content-Type: application/json" \
-            -d "{\"job_id\": \"${VERA_JOB_ID}\", \"token\": \"${VERA_CALLBACK_TOKEN}\", \"status\": \"failed\", \"error\": \"${ERROR_MSG}\"}"; then
+            -d "$PAYLOAD"; then
             touch /tmp/vera_callback_sent
           else
             echo "::error::callback POST failed"
@@ -314,7 +418,23 @@ jobs:
             exit 0
           fi
           RUN_URL="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
-          BODY="Vera job exited without reporting a result — see the [job run](${RUN_URL}). This is an automated failsafe; please retry the dispatch."
+          # Issue #3951: prefer a prior step's specific reason (e.g. the
+          # vera-creds 404 "orphaned run" message) over the generic body —
+          # "retry the dispatch" is actively wrong for a missing-row 404, where
+          # there is no row to authenticate against and only a fresh dispatch
+          # can help. Mirror the Report-failure callback step, which already
+          # reads this file. The generic fallback no longer claims that
+          # retrying THIS run will help.
+          BODY="Vera job exited without reporting a result — see the [job run](${RUN_URL}). This is an automated failsafe; a fresh dispatch may be required."
+          if [ -f /tmp/vera_step_failure_reason ]; then
+            # Issue #4695: this builds a Markdown comment (not JSON) — do NOT
+            # ``tr -d`` the ``"`` / ``\`` characters (stripping a backslash turns
+            # an escaped ``\n`` into a bare `n`). Cap length only.
+            REASON=$(head -c 500 < /tmp/vera_step_failure_reason)
+            if [ -n "$REASON" ]; then
+              BODY="${REASON} See the [job run](${RUN_URL})."
+            fi
+          fi
           if [ -f /tmp/vera_agent.log ]; then
             LOG_TAIL=$(tail -n 20 /tmp/vera_agent.log)
             BODY="${BODY}"$'\n\n'"<details><summary>Agent log tail</summary>"$'\n\n'"\`\`\`"$'\n'"${LOG_TAIL}"$'\n'"\`\`\`"$'\n'"</details>"
