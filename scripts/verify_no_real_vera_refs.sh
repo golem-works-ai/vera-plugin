@@ -18,7 +18,7 @@ echo "=== Checking for personal references to @vera / Vera Clemens ==="
 # Product names are filtered with grep -v.
 
 # 1. Grep for @vera as a standalone username (not part of a product name)
-if grep -rIn '@vera[^a-zA-Z0-9_-]' . --exclude-dir=.git --exclude-dir=node_modules \
+if grep -rInE '@vera([^a-zA-Z0-9_-]|$)' . --exclude-dir=.git --exclude-dir=node_modules \
     | grep -v 'vera-plugin' \
     | grep -v 'vera-staging' \
     | grep -v 'vera-runner' \
