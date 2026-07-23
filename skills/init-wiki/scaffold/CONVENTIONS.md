@@ -188,6 +188,38 @@ may be a symlink into the repo).
 report the failure honestly (do not fabricate success), and note any leftover
 worktree path with uncommitted changes.
 
+## Writing a log entry
+
+Every `log.md` entry is read two ways. At orientation, `wiki_orient.py` shows the
+recent entries as **header lines only**, expanding just the newest few to full
+bullets (older entries expand on demand when a header looks relevant). So the
+header is paid for on every entry, every session; the bullets are paid only for
+the newest few. Write for both surfaces:
+
+1. **Header carries the payload.** Format:
+   `## [YYYY-MM-DD] <action> | <page/topic> — <standalone claim>`. The claim after
+   the em-dash must state *what changed and why it matters* (or the conclusion
+   reached), so a reader who sees ONLY that line understands it and can judge
+   relevance. Keep the action verb (`create`/`update`/`ingest`/…) and lead with the
+   page or topic tag.
+2. **Lean, pointer-dense bullets.** Terse (well under the source material);
+   replace prose with pointers — `file.py`, `#1234`, `[[page]]`. Never drop a
+   load-bearing pointer (file path, issue #, page name, or the one key gotcha):
+   terse ≠ lossy. Cut edit-narration ("bumped `updated` →", "added a bullet", bare
+   "also touched X, Y, Z" lists — unless a path is itself the payload).
+3. **Invariant line — only when it adds something.** If the entry records a
+   decision or leaves a loose end, end with a single `Now true: …` / `Now
+   forbidden: …` / `Still open: …` line stating the forward-looking rule or open
+   status. SKIP it when it would only restate a fact already in the bullets (e.g. a
+   bare metric) — flag the *gap* the number implies instead, don't echo it.
+4. **Confirmed vs conjecture — findings only.** For entries that assert how the
+   system behaves, tag load-bearing claims with how they were established:
+   `(confirmed: read x.py)` / `(live query)` vs `(conjecture — unverified)`. Do NOT
+   add these tags to routine create/update entries.
+
+North star: write the context you would want to have when reading through this
+log the first time.
+
 ## Orientation (session start)
 
 At session start, orient by running the deterministic dump tool (not by reading
@@ -196,12 +228,14 @@ files manually):
 ```bash
 python3 <scripts-dir>/wiki_orient.py                 # uses $WIKI_PATH
 python3 <scripts-dir>/wiki_orient.py --log-entries 30
+python3 <scripts-dir>/wiki_orient.py --log-full 5    # expand newest 5 (default 3)
 ```
 
 It prints `CONVENTIONS.md` (this file), then `SCHEMA.md`, then `index.md`, then
-the last N `log.md` entries — deterministic and bounded (~2–5K tokens). This is
-the **only wiki read** needed to know what exists and how it is organized. Do it
-**once per session**, not every turn.
+the last N `log.md` entries as a **changelog** — header lines only, with the
+newest few expanded to full bullets (see "Writing a log entry"). Deterministic
+and bounded (~2–5K tokens). This is the **only wiki read** needed to know what
+exists and how it is organized. Do it **once per session**, not every turn.
 
 ## Lint
 
