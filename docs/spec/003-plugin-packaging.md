@@ -37,5 +37,5 @@ both ecosystems within their verified discovery constraints.
 
 #### 🚧 Host a skills.urls index for one-line opencode install
 
-- [ ] A generated `index.json` is published (e.g. via GitHub Pages) listing the bundled skills and their `SKILL.md` URLs <!-- slug: packaging.skills-urls.index-published -->
-- [ ] The README documents the `skills.urls` config entry for opencode users <!-- slug: packaging.skills-urls.readme -->
+- [x] A generated `index.json` is published (e.g. via GitHub Pages) listing the bundled skills and their `SKILL.md` URLs <!-- slug: packaging.skills-urls.index-published -->
+- [x] The README documents the `skills.urls` config entry for opencode users <!-- slug: packaging.skills-urls.readme -->
